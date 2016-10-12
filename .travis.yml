@@ -7,11 +7,8 @@ python:
   - "3.4"
   - "3.5"
   - "nightly"
-before_install:
-  - sudo apt-get install fuse
-  - sudo chmod a+r /etc/fuse.conf
 install:
-  - pip install -r tests/requirements.txt
+  - pip install ."[testing]"
 script:
   - coverage run --source ./ --omit ./tests/server.py -m unittest tests
 after_success:

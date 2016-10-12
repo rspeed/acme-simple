@@ -13,6 +13,15 @@ setup(
         'acme-simple = acme_simple:main',
     ]},
     setup_requires=['setuptools_scm'],
+    extras_require = {
+        'testing': [
+            'coveralls'
+        ],
+        'distribution': [
+            'wheel',
+            'setuptools_scm'
+        ]
+    },
     classifiers = [
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: System Administrators',
@@ -24,6 +33,6 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.5'
     ]
 )
