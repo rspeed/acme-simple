@@ -5,13 +5,13 @@ try:
 except ImportError:
     from io import StringIO # Python 3
 
-import acme_tiny
+import acme_simple
 from .monkey import gen_keys
 
 KEYS = gen_keys()
 
 class TestModule(unittest.TestCase):
-    "Tests for acme_tiny.get_crt()"
+    "Tests for acme_simple.get_crt()"
 
     def setUp(self):
         self.CA = "https://acme-staging.api.letsencrypt.org"
@@ -27,7 +27,7 @@ class TestModule(unittest.TestCase):
         """ Successfully issue a certificate via common name """
         old_stdout = sys.stdout
         sys.stdout = StringIO()
-        result = acme_tiny.main([
+        result = acme_simple.main([
             "--account-key", KEYS['account_key'].name,
             "--csr", KEYS['domain_csr'].name,
             "--acme-dir", self.tempdir,
@@ -44,7 +44,7 @@ class TestModule(unittest.TestCase):
         """ Successfully issue a certificate via subject alt name """
         old_stdout = sys.stdout
         sys.stdout = StringIO()
-        result = acme_tiny.main([
+        result = acme_simple.main([
             "--account-key", KEYS['account_key'].name,
             "--csr", KEYS['san_csr'].name,
             "--acme-dir", self.tempdir,
@@ -60,7 +60,7 @@ class TestModule(unittest.TestCase):
     def test_success_cli(self):
         """ Successfully issue a certificate via command line interface """
         crt, err = Popen([
-            "python", "acme_tiny.py",
+            "python", "acme_simple.py",
             "--account-key", KEYS['account_key'].name,
             "--csr", KEYS['domain_csr'].name,
             "--acme-dir", self.tempdir,
@@ -73,7 +73,7 @@ class TestModule(unittest.TestCase):
     def test_missing_account_key(self):
         """ OpenSSL throws an error when the account key is missing """
         try:
-            result = acme_tiny.main([
+            result = acme_simple.main([
                 "--account-key", "/foo/bar",
                 "--csr", KEYS['domain_csr'].name,
                 "--acme-dir", self.tempdir,
@@ -87,7 +87,7 @@ class TestModule(unittest.TestCase):
     def test_missing_csr(self):
         """ OpenSSL throws an error when the CSR is missing """
         try:
-            result = acme_tiny.main([
+            result = acme_simple.main([
                 "--account-key", KEYS['account_key'].name,
                 "--csr", "/foo/bar",
                 "--acme-dir", self.tempdir,
@@ -101,7 +101,7 @@ class TestModule(unittest.TestCase):
     def test_weak_key(self):
         """ Let's Encrypt rejects weak keys """
         try:
-            result = acme_tiny.main([
+            result = acme_simple.main([
                 "--account-key", KEYS['weak_key'].name,
                 "--csr", KEYS['domain_csr'].name,
                 "--acme-dir", self.tempdir,
@@ -115,7 +115,7 @@ class TestModule(unittest.TestCase):
     def test_invalid_domain(self):
         """ Let's Encrypt rejects invalid domains """
         try:
-            result = acme_tiny.main([
+            result = acme_simple.main([
                 "--account-key", KEYS['account_key'].name,
                 "--csr", KEYS['invalid_csr'].name,
                 "--acme-dir", self.tempdir,
@@ -129,7 +129,7 @@ class TestModule(unittest.TestCase):
     def test_nonexistent_domain(self):
         """ Should be unable verify a nonexistent domain """
         try:
-            result = acme_tiny.main([
+            result = acme_simple.main([
                 "--account-key", KEYS['account_key'].name,
                 "--csr", KEYS['nonexistent_csr'].name,
                 "--acme-dir", self.tempdir,
@@ -143,7 +143,7 @@ class TestModule(unittest.TestCase):
     def test_account_key_domain(self):
         """ Can't use the account key for the CSR """
         try:
-            result = acme_tiny.main([
+            result = acme_simple.main([
                 "--account-key", KEYS['account_key'].name,
                 "--csr", KEYS['account_csr'].name,
                 "--acme-dir", self.tempdir,

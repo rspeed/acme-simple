@@ -1,16 +1,16 @@
 from setuptools import setup
 
 setup(
-    name="acme-tiny",
+    name="acme-simple",
     use_scm_version=True,
-    url="https://github.com/diafygi/acme-tiny",
-    author="Daniel Roesler",
-    author_email="diafygi@gmail.com",
-    description="A tiny script to issue and renew TLS certs from Let's Encrypt",
+    url="https://github.com/rspeed/acme-simple",
+    author="Rob Speed",
+    author_email="speed.rob@gmail.com",
+    description="A simple script to issue and renew TLS certs from Let's Encrypt",
     license="MIT",
-    py_modules=['acme_tiny'],
+    py_modules=['acme_simple'],
     entry_points={'console_scripts': [
-        'acme-tiny = acme_tiny:main',
+        'acme-simple = acme_simple:main',
     ]},
     setup_requires=['setuptools_scm'],
     classifiers = [
