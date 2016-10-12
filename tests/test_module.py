@@ -1,26 +1,49 @@
 import unittest, os, sys, tempfile
 from subprocess import Popen, PIPE
+import multiprocessing
+from contextlib import contextmanager
 try:
     from StringIO import StringIO # Python 2
 except ImportError:
     from io import StringIO # Python 3
 
 import acme_simple
-from .monkey import gen_keys
+from tests.monkey import gen_keys, run_server
 
-KEYS = gen_keys()
+@contextmanager
+def captured_output():
+    new_out, new_err = StringIO(), StringIO()
+    old_out, old_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = new_out, new_err
+        yield sys.stdout, sys.stderr
+    finally:
+        sys.stdout, sys.stderr = old_out, old_err
 
 class TestModule(unittest.TestCase):
     "Tests for acme_simple.get_crt()"
+    keys = None
+    talkie = None
+
+    @classmethod
+    def setUpClass(cls):
+        walkie, cls.talkie = multiprocessing.Pipe()
+        cls.server = multiprocessing.Process(target=run_server, args=[walkie, '0.0.0.0', 8080])
+        cls.server.start()
+        cls.keys = gen_keys()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.terminate()
+        cls.server.join() # wait for the server process to quit
 
     def setUp(self):
         self.CA = "https://acme-staging.api.letsencrypt.org"
         self.tempdir = tempfile.mkdtemp()
-        self.fuse_proc = Popen(["python", "tests/monkey.py", self.tempdir])
+        self.talkie.send(self.tempdir)
+        self.talkie.recv() # prevent a race condition by waiting for the confirmation
 
     def tearDown(self):
-        self.fuse_proc.terminate()
-        self.fuse_proc.wait()
         os.rmdir(self.tempdir)
 
     def test_success_cn(self):
@@ -28,8 +51,8 @@ class TestModule(unittest.TestCase):
         old_stdout = sys.stdout
         sys.stdout = StringIO()
         result = acme_simple.main([
-            "--account-key", KEYS['account_key'].name,
-            "--csr", KEYS['domain_csr'].name,
+            "--account-key", self.keys['account_key'].name,
+            "--csr", self.keys['domain_csr'].name,
             "--acme-dir", self.tempdir,
             "--ca", self.CA,
         ])
@@ -45,8 +68,8 @@ class TestModule(unittest.TestCase):
         old_stdout = sys.stdout
         sys.stdout = StringIO()
         result = acme_simple.main([
-            "--account-key", KEYS['account_key'].name,
-            "--csr", KEYS['san_csr'].name,
+            "--account-key", self.keys['account_key'].name,
+            "--csr", self.keys['san_csr'].name,
             "--acme-dir", self.tempdir,
             "--ca", self.CA,
         ])
@@ -59,13 +82,14 @@ class TestModule(unittest.TestCase):
 
     def test_success_cli(self):
         """ Successfully issue a certificate via command line interface """
-        crt, err = Popen([
-            "python", "acme_simple.py",
-            "--account-key", KEYS['account_key'].name,
-            "--csr", KEYS['domain_csr'].name,
+        blarg = Popen([
+            sys.executable, "-m", "acme_tiny",
+            "--account-key", self.keys['account_key'].name,
+            "--csr", self.keys['domain_csr'].name,
             "--acme-dir", self.tempdir,
             "--ca", self.CA,
-        ], stdout=PIPE, stderr=PIPE).communicate()
+        ], stdout=PIPE, stderr=PIPE)
+        crt, err = blarg.communicate()
         out, err = Popen(["openssl", "x509", "-text", "-noout"], stdin=PIPE,
             stdout=PIPE, stderr=PIPE).communicate(crt)
         self.assertIn("Issuer: CN=Fake LE Intermediate", out.decode("utf8"))
@@ -75,7 +99,7 @@ class TestModule(unittest.TestCase):
         try:
             result = acme_simple.main([
                 "--account-key", "/foo/bar",
-                "--csr", KEYS['domain_csr'].name,
+                "--csr", self.keys['domain_csr'].name,
                 "--acme-dir", self.tempdir,
                 "--ca", self.CA,
             ])
@@ -88,7 +112,7 @@ class TestModule(unittest.TestCase):
         """ OpenSSL throws an error when the CSR is missing """
         try:
             result = acme_simple.main([
-                "--account-key", KEYS['account_key'].name,
+                "--account-key", self.keys['account_key'].name,
                 "--csr", "/foo/bar",
                 "--acme-dir", self.tempdir,
                 "--ca", self.CA,
@@ -96,14 +120,14 @@ class TestModule(unittest.TestCase):
         except Exception as e:
             result = e
         self.assertIsInstance(result, IOError)
-        self.assertIn("Error loading /foo/bar", result.args[0])
+        self.assertIn("/foo/bar: No such file or directory", result.args[0])
 
     def test_weak_key(self):
         """ Let's Encrypt rejects weak keys """
         try:
             result = acme_simple.main([
-                "--account-key", KEYS['weak_key'].name,
-                "--csr", KEYS['domain_csr'].name,
+                "--account-key", self.keys['weak_key'].name,
+                "--csr", self.keys['domain_csr'].name,
                 "--acme-dir", self.tempdir,
                 "--ca", self.CA,
             ])
@@ -116,8 +140,8 @@ class TestModule(unittest.TestCase):
         """ Let's Encrypt rejects invalid domains """
         try:
             result = acme_simple.main([
-                "--account-key", KEYS['account_key'].name,
-                "--csr", KEYS['invalid_csr'].name,
+                "--account-key", self.keys['account_key'].name,
+                "--csr", self.keys['invalid_csr'].name,
                 "--acme-dir", self.tempdir,
                 "--ca", self.CA,
             ])
@@ -130,8 +154,8 @@ class TestModule(unittest.TestCase):
         """ Should be unable verify a nonexistent domain """
         try:
             result = acme_simple.main([
-                "--account-key", KEYS['account_key'].name,
-                "--csr", KEYS['nonexistent_csr'].name,
+                "--account-key", self.keys['account_key'].name,
+                "--csr", self.keys['nonexistent_csr'].name,
                 "--acme-dir", self.tempdir,
                 "--ca", self.CA,
             ])
@@ -144,8 +168,8 @@ class TestModule(unittest.TestCase):
         """ Can't use the account key for the CSR """
         try:
             result = acme_simple.main([
-                "--account-key", KEYS['account_key'].name,
-                "--csr", KEYS['account_csr'].name,
+                "--account-key", self.keys['account_key'].name,
+                "--csr", self.keys['account_csr'].name,
                 "--acme-dir", self.tempdir,
                 "--ca", self.CA,
             ])
@@ -154,3 +178,5 @@ class TestModule(unittest.TestCase):
         self.assertIsInstance(result, ValueError)
         self.assertIn("Certificate public key must be different than account key", result.args[0])
 
+if __name__ == "__main__":
+    unittest.main()

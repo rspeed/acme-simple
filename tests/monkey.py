@@ -1,14 +1,17 @@
-import os, sys
+import os, signal, socket
 from tempfile import NamedTemporaryFile
 from subprocess import Popen
-from fuse import FUSE, Operations, LoggingMixIn
 try:
     from urllib.request import urlopen # Python 3
+    from http.server import SimpleHTTPRequestHandler, HTTPServer
 except ImportError:
     from urllib2 import urlopen # Python 2
+    from SimpleHTTPServer import SimpleHTTPRequestHandler
+    from BaseHTTPServer import HTTPServer
 
 # domain with server.py running on it for testing
 DOMAIN = os.getenv("TRAVIS_DOMAIN", "travis-ci.gethttpsforfree.com")
+OPENSSL_CNF = os.getenv("OPENSSL_CNF", "etc/openssl/openssl.cnf")
 
 # generate account and domain keys
 def gen_keys():
@@ -29,7 +32,8 @@ def gen_keys():
     # subject alt-name domain
     san_csr = NamedTemporaryFile()
     san_conf = NamedTemporaryFile()
-    san_conf.write(open("/etc/ssl/openssl.cnf").read().encode("utf8"))
+    with open(OPENSSL_CNF) as openssl_conf:
+        san_conf.write(openssl_conf.read().encode("utf8"))
     san_conf.write("\n[SAN]\nsubjectAltName=DNS:{0}\n".format(DOMAIN).encode("utf8"))
     san_conf.seek(0)
     Popen(["openssl", "req", "-new", "-sha256", "-key", domain_key.name,
@@ -62,27 +66,30 @@ def gen_keys():
         "account_csr": account_csr,
     }
 
-# fake a folder structure to catch the key authorization file
-FS = {}
-class Passthrough(LoggingMixIn, Operations): # pragma: no cover
-    def getattr(self, path, fh=None):
-        f = FS.get(path, None)
-        if f is None:
-            return super(Passthrough, self).getattr(path, fh=fh)
-        return f
+class WellKnownHTTPRequestHandler(SimpleHTTPRequestHandler):
+    def translate_path(self, path):
+        # Ugh, old-style class in python 2
+        return SimpleHTTPRequestHandler.translate_path(self, "/{}".format(path.split("/")[-1]))
 
-    def write(self, path, buf, offset, fh):
-        urlopen("http://{0}/.well-known/acme-challenge/?{1}".format(DOMAIN,
-            os.getenv("TRAVIS_SESSION", "not_set")), buf)
-        return len(buf)
+def run_server(path, address="localhost", port=8080):
+    httpd = HTTPServer((address, port), WellKnownHTTPRequestHandler)
+    httpd.timeout = 0.1
 
-    def create(self, path, mode, fi=None):
-        FS[path] = {"st_mode": 33204}
-        return 0
+    def handle_shutdown(*args):
+        httpd.server_close()
 
-    def unlink(self, path):
-        del(FS[path])
-        return 0
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
 
-if __name__ == "__main__": # pragma: no cover
-    FUSE(Passthrough(), sys.argv[1], nothreads=True, foreground=True)
+    while True:
+        if path.poll():
+            new_path = path.recv()
+            print("Serving directory {0} on {1}:{2}".format(new_path, address, port))
+            os.chdir(new_path)
+            path.send(True)
+
+        try:
+            httpd.handle_request()
+        except (ValueError, socket.error):
+            # a closed socket indicates that a sigterm has been handled
+            break
