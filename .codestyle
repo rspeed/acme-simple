@@ -1,0 +1,15 @@
+# EditorConfig: http://editorconfig.org
+
+# top-most EditorConfig file
+root = true
+
+[*]
+charset = utf8
+end_of_line = lf
+
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Yes, I am a monster
+indent_size = tab
+indent_size = 2
