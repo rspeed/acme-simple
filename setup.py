@@ -13,10 +13,8 @@ setup(
         'acme-simple = acme_simple:main',
     ]},
     setup_requires=['setuptools_scm'],
+    tests_require=['coveralls'],
     extras_require = {
-        'testing': [
-            'coveralls'
-        ],
         'distribution': [
             'wheel',
             'setuptools_scm'
