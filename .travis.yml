@@ -2,13 +2,14 @@ sudo: required
 dist: trusty
 language: python
 python:
-  - "2.7"
-  - "3.3"
   - "3.4"
   - "3.5"
-  - "nightly"
+  - "3.6"
 install:
-  - pip install ."[testing]"
+  - pip install .
+env:
+  - TESTING_DOMAIN=acme-simple.test.robspeed.rocks
+  - OPENSSL_CNF=/etc/openssl/openssl.cnf
 script:
   - coverage run --source ./ --omit ./tests/server.py -m unittest tests
 after_success:
